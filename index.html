@@ -2,12 +2,15 @@
 <!--
 ═══════════════════════════════════════════════════════════════════════════
   コンビニレーダー （konbini-radar）
-  現在バージョン: v1.2.0
+  現在バージョン: v1.3.0
 ═══════════════════════════════════════════════════════════════════════════
 
 ■ このファイルでできること
   ・現在地のまわりのコンビニを探す（探す範囲は 200m〜3000m で調整できる）
   ・画面中心の小さな十字（レティクル）に合わせて、指定した位置のまわりを探せる
+    （「十字の位置で探す」を押すと、その場所に◎ピンが立って中心が分かる）
+  ・範囲スライダーを動かすと、表示中の検索（周辺・ルート沿い）が新しい範囲で
+    自動的にかけ直される。地図の位置・拡大率・ルート表示はそのまま
   ・地図を「長押し」して◎ピンを置くと、その場所を検索の中心・ルートの出発地にできる
   ・「ルート沿い」ボタンで、出発地→到着地の道沿いのコンビニを探せる
     （出発地は「現在地から出発」ワンタップでもOK。画面の案内に従うだけ）
@@ -57,6 +60,13 @@
           ・画面中心に目立たない小さな十字（レティクル）を復活
           ・「十字の位置で探す」ボタンを追加し、現在地とは別の指定位置を中心に探せるようにした
           ・「ルート沿い」ボタンを地図右下に移動し、下のパネルをさらに小さくした
+  v1.3.0  検索まわりの使い勝手を改善。
+          ・「十字の位置で探す」と、その場所に◎ピンが立ち検索の中心が分かるようにした
+          ・範囲スライダーを動かすと、表示中の検索を新しい範囲で自動的にかけ直すようにした
+            （地図の位置・拡大率・ルート表示は動かさない。円は即時、検索は0.5秒後に実行）
+          ・「◯件見つかりました」の表示を1行の小さなカードにし、ボタン類を廃止
+            （Google Mapボタンは0件・失敗のときだけ出す）
+          ・「現在地で探す」を押したときは◎ピンを自動で外すようにした（出発地の混乱を防ぐ）
 
 ■ 使っている無料サービス（すべてカード登録不要）
   ・Leaflet 1.9.4 …………… 地図の表示（CDN: cdnjs）
@@ -68,7 +78,7 @@
 
 ■ 知っておいてほしい限界
   ・位置情報は https のページでしか取れません（Vercelなら大丈夫）
-  ・YOLPでも店の取りこぼしはゼロになりません →「Google Mapでこの周辺も見る」で補完
+  ・YOLPでも店の取りこぼしはゼロになりません（0件・失敗のときはGoogle Mapを開くボタンが出ます）
   ・OSRM/Overpassの公開サーバーは混みあうと失敗することがあります（時間をおいて再試行）
   ・履歴はこの端末のブラウザの中だけに保存されます（他の端末には出ません）
 ═══════════════════════════════════════════════════════════════════════════
@@ -421,7 +431,7 @@ input[type=range]{ flex:1; accent-color:var(--store); height:22px; min-width:0; 
 /* ════════════════════════════════════════════════════════════
    基本設定
    ════════════════════════════════════════════════════════════ */
-const APP_VERSION = '1.2.0';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
+const APP_VERSION = '1.3.0';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
 document.getElementById('verLabel').textContent = 'v' + APP_VERSION;
 
 // Yahoo!のClient ID。空文字 '' にすると自動でOSM(Overpass)に切り替わる（動作確認用）
@@ -580,7 +590,7 @@ map.on('contextmenu', e => {
   if (abStep) return; // ルート沿い検索の途中は誤操作を防ぐため無効
   placePin(e.latlng);
 });
-function placePin(latlng){
+function placePin(latlng, quiet){
   if (!centerPin){
     centerPin = L.marker(latlng, {
       draggable: true,
@@ -594,13 +604,23 @@ function placePin(latlng){
       '<button class="pp-btn pp-route" onclick="map.closePopup(); doSearch(&quot;pin&quot;)">このあたりを探す</button>' +
       '<button class="pp-btn pp-remove" onclick="removePin()">ピンを外す</button>'
     );
+    // ピンをドラッグして離したら、ピン中心の検索を新しい場所でかけ直す
+    centerPin.on('dragend', () => {
+      if (lastSearch && lastSearch.type === 'circle' && lastSearch.label !== '現在地'){
+        const p = centerPin.getLatLng();
+        searchArea({ lat: p.lat, lng: p.lng }, lastSearch.label, false);
+      }
+    });
   }else{
     centerPin.setLatLng(latlng);
   }
-  setStatus('◎ピンを置きました。ピンをタップして「このあたりを探す」を押すと、ピンのまわりを探します。<div class="src">ドラッグで移動／ルートの出発地もピンになります</div>');
+  if (!quiet) setStatus('◎ピンを置きました。ピンをタップして「このあたりを探す」を押すと、ピンのまわりを探します。<div class="src">ドラッグで移動／ルートの出発地もピンになります</div>');
+}
+function removePinQuiet(){ // 文言を出さずに◎ピンだけ外す（内部用）
+  if (centerPin){ map.removeLayer(centerPin); centerPin = null; }
 }
 function removePin(){
-  if (centerPin){ map.removeLayer(centerPin); centerPin = null; }
+  removePinQuiet();
   map.closePopup();
   setStatus('◎ピンを外しました。探す中心とルートの出発地は現在地に戻ります。');
 }
@@ -687,8 +707,8 @@ function dedup(list){
   return kept;
 }
 
-// 検索結果を地図に描く
-function renderStores(list, srcLabel, extraHtml){
+// 検索結果を地図に描く。headSub は「範囲」や「ルート長」などの短い補足文
+function renderStores(list, srcLabel, headSub){
   storeLayer.clearLayers();
   stores = list;
   if (me) stores.sort((a, b) => distM(me, a) - distM(me, b)); // 現在地があれば近い順
@@ -707,32 +727,35 @@ function renderStores(list, srcLabel, extraHtml){
     );
   });
 
-  setStatus(
-    (extraHtml || '') +
-    '<b>' + stores.length + '件</b>のコンビニが見つかりました。ピンをタップすると詳細が出ます。' +
-    '<br><button class="act" onclick="openGmapArea()">Google Mapでこの周辺も見る</button>' +
-    '<button class="act" onclick="clearResults()">表示を消す</button>' +
-    (srcLabel ? '<div class="src">データ: ' + srcLabel + '</div>' : '')
-  );
+  // 1行の小さなカードで件数だけ知らせる（×で表示を閉じられる。ピンは残る）
+  setStatus('<div class="rt">' +
+    '<div class="rt-txt"><b>コンビニ ' + stores.length + '件</b>' +
+    '<span>' + (headSub ? headSub + '・' : '') + 'ピンをタップで詳細・' + srcLabel + '</span></div>' +
+    '<button class="rt-x" onclick="setStatus(\'\')">×</button></div>');
 }
 
 // 検索結果・円・ルートをまとめて消して、地図をきれいにする
 function clearResults(){
   storeLayer.clearLayers();
   stores = [];
+  lastSearch = null;
   if (searchCircle){ map.removeLayer(searchCircle); searchCircle = null; }
   clearRouteLayers();
   setStatus('');
 }
 
-// Googleマップで周辺のコンビニを見る（アプリで漏れがあったときの逃げ道）
+// Googleマップで周辺のコンビニを見る（0件・失敗のときの逃げ道）
 function openGmapArea(){
   const c = gmapCenter();
   window.open('https://www.google.com/maps/search/コンビニ/@' + c.lat + ',' + c.lng + ',16z', '_blank');
 }
 
-// 「探す」本体。kind: 'me'=現在地 / 'map'=十字の位置（地図の中心） / 'pin'=◎ピン
-async function doSearch(kind){
+// 直近の検索内容（範囲スライダーでのかけ直しに使う）
+// {type:'circle', c:{lat,lng}, label} または {type:'ab', coords, head}
+let lastSearch = null;
+
+// 「探す」入口。kind: 'me'=現在地 / 'map'=十字の位置（地図の中心） / 'pin'=◎ピン
+function doSearch(kind){
   if (abStep){ showToast('ルート沿い検索の途中です。先に「中止」してください'); return; }
 
   let c, label;
@@ -742,14 +765,23 @@ async function doSearch(kind){
   }else if (kind === 'map'){
     const p = map.getCenter();
     c = { lat: p.lat, lng: p.lng }; label = '十字の位置';
+    placePin(c, true); // 探した中心が分かるように◎ピンを立てる（ルートの出発地にもなる）
   }else{
     if (!me){
       showToast('現在地がまだ取れていません。◉ボタンを押すか、「十字の位置で探す」を使ってください');
       return;
     }
     c = { lat: me.lat, lng: me.lng }; label = '現在地';
+    removePinQuiet(); // 現在地で探すときは◎ピンを外す（出発地も現在地に戻る）
   }
+  searchArea(c, label, true);
+}
+
+// 円検索の本体。fit=true のときだけ円全体が見えるよう地図を動かす
+// （範囲スライダーでのかけ直しは fit=false で呼ばれ、地図は動かない）
+async function searchArea(c, label, fit){
   lastCenter = c;
+  lastSearch = { type: 'circle', c: c, label: label };
   const r = Number($('radius').value);
 
   if (searchCircle) map.removeLayer(searchCircle);
@@ -757,7 +789,7 @@ async function doSearch(kind){
     radius: r, color: '#0FA36B', weight: 2, opacity: .7,
     fillColor: '#0FA36B', fillOpacity: .07
   }).addTo(map);
-  map.fitBounds(searchCircle.getBounds(), FIT_PAD);
+  if (fit) map.fitBounds(searchCircle.getBounds(), FIT_PAD);
 
   setStatus(label + 'のまわり ' + fmtDist(r) + ' を探しています…');
   try{
@@ -766,11 +798,13 @@ async function doSearch(kind){
       : dedup(await overpassCircle(c.lat, c.lng, r));
     if (!list.length){
       storeLayer.clearLayers();
-      setStatus('この範囲にはコンビニが見つかりませんでした。「範囲」を広げてもう一度試してください。' +
+      stores = [];
+      setStatus('この範囲にはコンビニが見つかりませんでした。「範囲」を広げると自動で探し直します。' +
         '<br><button class="act" onclick="openGmapArea()">Google Mapでこの周辺も見る</button>');
       return;
     }
-    renderStores(list, YAHOO_CLIENT_ID ? 'Yahoo! JAPAN' : 'OpenStreetMap');
+    renderStores(list, YAHOO_CLIENT_ID ? 'Yahoo! JAPAN' : 'OpenStreetMap',
+      label + 'から ' + fmtDist(r));
   }catch(e){
     setStatus('検索に失敗しました。通信状況を確認して、少し時間をおいてからもう一度試してください。' +
       '<br><button class="act" onclick="openGmapArea()">Google Mapでこの周辺も見る</button>');
@@ -805,6 +839,8 @@ function clearRouteLayers(){
   if (abMarkerA){ map.removeLayer(abMarkerA); abMarkerA = null; }
   if (abMarkerB){ map.removeLayer(abMarkerB); abMarkerB = null; }
   currentDest = null;
+  // ルート沿いの検索は元のルートが消えたので、スライダーでのかけ直し対象から外す
+  if (lastSearch && lastSearch.type === 'ab') lastSearch = null;
 }
 function clearRouteAndSay(){
   clearRouteLayers();
@@ -998,6 +1034,7 @@ function cancelAb(){
   if (abMarkerA){ map.removeLayer(abMarkerA); abMarkerA = null; }
   if (abMarkerB){ map.removeLayer(abMarkerB); abMarkerB = null; }
   if (abLine){ map.removeLayer(abLine); abLine = null; }
+  if (lastSearch && lastSearch.type === 'ab') lastSearch = null;
   $('abBtn').textContent = 'ルート沿い';
   $('abBtn').classList.remove('on');
   setStatus('ルート沿い検索を中止しました。');
@@ -1029,7 +1066,6 @@ function sampleLine(coords, spacingM, maxN){
 
 async function runAbSearch(){
   abStep = 3; // 検索中（地図タップを受け付けない）
-  const r = Number($('radius').value); // スライダー値＝ルートからの幅
   const modeLabel = travelMode === 'car' ? '車' : '徒歩';
   setStatus('出発→到着の' + modeLabel + 'ルートを計算しています…');
   let route;
@@ -1045,24 +1081,31 @@ async function runAbSearch(){
   }
   if (abLine) map.removeLayer(abLine);
   abLine = L.geoJSON(route.geometry, { style:{ color:'#2F7DF6', weight:5, opacity:.85 } }).addTo(map);
-  map.fitBounds(abLine.getBounds(), FIT_PAD);
+  map.fitBounds(abLine.getBounds(), FIT_PAD); // 最初の1回だけルート全体が見えるようにする
 
-  const coords = route.geometry.coordinates;
-  const head = 'ルート: 約 ' + fmtDist(route.distance) + ' ・ ' + modeLabel + 'で約 ' + fmtDur(route.duration) + '<br>';
+  const head = '約' + fmtDist(route.distance) + '・' + modeLabel + '約' + fmtDur(route.duration);
+  await searchAlong(route.geometry.coordinates, head);
+  endAbMode(); // 終わったらモードは自動で終了（線と結果は残る）
+}
+
+// ルート沿いの検索本体。範囲スライダーでのかけ直しでもここが呼ばれる（地図は動かさない）
+async function searchAlong(coords, head){
+  const r = Number($('radius').value); // スライダー値＝ルートからの幅
+  lastSearch = { type: 'ab', coords: coords, head: head };
   try{
     let list = [];
     if (YAHOO_CLIENT_ID){
       // YOLP: ルート上を最大20点サンプリングして、各点で円検索した結果を合わせる
       const pts = sampleLine(coords, r, 20);
       for (let i = 0; i < pts.length; i++){
-        setStatus(head + 'ルート沿いのコンビニを探しています…（' + (i+1) + '/' + pts.length + '）');
+        setStatus('ルート沿い（幅 ' + fmtDist(r) + '）を検索中…（' + (i+1) + '/' + pts.length + '）');
         try{ list = list.concat(await yolpCircle(pts[i].lat, pts[i].lng, r)); }
         catch(e){ /* 1点分の失敗は飛ばして続ける */ }
       }
       list = dedup(list);
     }else{
       // OSM: ルート線に沿った検索を1回で行う（座標が多すぎるので80点くらいに間引く）
-      setStatus(head + 'ルート沿いのコンビニを探しています…');
+      setStatus('ルート沿い（幅 ' + fmtDist(r) + '）を検索中…');
       const step = Math.max(1, Math.ceil(coords.length / 80));
       const lineStr = coords.filter((_, i) => i % step === 0)
         .map(c => c[1] + ',' + c[0]).join(',');
@@ -1074,17 +1117,16 @@ async function runAbSearch(){
 out center;`;
       list = dedup(await overpassQuery(q));
     }
-    endAbMode(); // 検索が終わったらモードは自動で終了（線と結果は残る）
     if (!list.length){
-      setStatus(head + 'ルート沿いにコンビニが見つかりませんでした。「範囲」（＝ルートからの幅）を広げて、もう一度「ルート沿い」からお試しください。' +
-        '<br><button class="act danger" onclick="clearResults()">表示を消す</button>');
+      storeLayer.clearLayers();
+      stores = [];
+      setStatus('ルート沿い（幅 ' + fmtDist(r) + '）にコンビニがありません。「範囲」を広げると自動で探し直します。<div class="src">ルート: ' + head + '</div>');
       return;
     }
-    renderStores(list, YAHOO_CLIENT_ID ? 'Yahoo! JAPAN' : 'OpenStreetMap', head);
+    renderStores(list, YAHOO_CLIENT_ID ? 'Yahoo! JAPAN' : 'OpenStreetMap',
+      'ルート' + head + '・幅 ' + fmtDist(r));
   }catch(e){
-    endAbMode();
-    setStatus(head + 'ルート沿いの検索に失敗しました。通信状況を確認して、もう一度「ルート沿い」からお試しください。' +
-      '<br><button class="act danger" onclick="clearResults()">表示を消す</button>');
+    setStatus('ルート沿いの検索に失敗しました。通信状況を確認して、範囲スライダーを動かすか「ルート沿い」からやり直してください。');
   }
 }
 function abRetry(){ if (abA && abB) runAbSearch(); }
@@ -1092,8 +1134,22 @@ function abRetry(){ if (abA && abB) runAbSearch(); }
 /* ════════════════════════════════════════════════════════════
    画面の操作（ボタンやトグル）
    ════════════════════════════════════════════════════════════ */
+// 範囲スライダー：円はその場で追従し、0.5秒止まったら同じ検索をかけ直す
+// （地図の位置・拡大率・ルート表示はそのまま。連続でAPIを叩かないための0.5秒）
+let sliderTimer = null;
 $('radius').addEventListener('input', () => {
-  $('radiusVal').textContent = $('radius').value + ' m';
+  const r = Number($('radius').value);
+  $('radiusVal').textContent = r + ' m';
+  if (searchCircle) searchCircle.setRadius(r); // 緑の円はリアルタイムに追従
+  if (!lastSearch || abStep) return; // 検索前・ルート沿いの途中は何もしない
+  clearTimeout(sliderTimer);
+  sliderTimer = setTimeout(() => {
+    if (lastSearch.type === 'circle'){
+      searchArea(lastSearch.c, lastSearch.label, false);       // 同じ中心・新しい範囲
+    }else{
+      searchAlong(lastSearch.coords, lastSearch.head);         // 同じルート・新しい幅
+    }
+  }, 500);
 });
 $('searchBtn').addEventListener('click', () => doSearch('me'));
 $('searchHereBtn').addEventListener('click', () => doSearch('map'));
