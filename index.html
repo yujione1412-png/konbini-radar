@@ -2,23 +2,25 @@
 <!--
 ═══════════════════════════════════════════════════════════════════════════
   コンビニレーダー （konbini-radar）
-  現在バージョン: v1.1.0
+  現在バージョン: v1.2.0
 ═══════════════════════════════════════════════════════════════════════════
 
 ■ このファイルでできること
   ・現在地のまわりのコンビニを探す（探す範囲は 200m〜3000m で調整できる）
-  ・地図を「長押し」して◎ピンを置くと、その場所のまわりを探せる
+  ・画面中心の小さな十字（レティクル）に合わせて、指定した位置のまわりを探せる
+  ・地図を「長押し」して◎ピンを置くと、その場所を検索の中心・ルートの出発地にできる
   ・「ルート沿い」ボタンで、出発地→到着地の道沿いのコンビニを探せる
     （出発地は「現在地から出発」ワンタップでもOK。画面の案内に従うだけ）
   ・見つけたコンビニまでのルート（徒歩／車）をアプリ内に表示する
   ・「Google Mapでルートを開く」でGoogleマップにも切り替えられる（ナビは自動開始しない）
   ・ルートを表示した履歴を端末内（localStorage）に残し、あとから再表示できる
 
-■ 操作のきほん（v1.1.0で新しくなった）
+■ 操作のきほん
   ・地図は全画面。操作は下の小さなパネルにまとまっている
-  ・◎ピン: 地図を長押しで置く／動かす。ピンをタップすると「外す」も選べる
-  ・ルートの出発地: ◎ピンがあればピンから、なければ現在地から（切り替え操作は廃止）
-  ・ルート沿い検索: 「ルート沿い」→ 案内に従って出発地・到着地を決めるだけ
+  ・「現在地で探す」= 現在地のまわり ／「十字の位置で探す」= 地図を動かして十字を合わせた場所のまわり
+  ・◎ピン: 地図を長押しで置く／動かす。ピンをタップすると「このあたりを探す」「外す」を選べる
+  ・ルートの出発地: ◎ピンがあればピンから、なければ現在地から（自動）
+  ・ルート表示や徒歩／車の切り替えでは、地図の位置と拡大率は動かさない（見ている場所を保つ）
 
 ■ 次にやること（アイデア）
   ・お気に入りの店を登録できるようにする
@@ -49,6 +51,12 @@
           ・ルート沿い検索を、画面の案内に従うステップ操作に一新
             （「現在地から出発」ボタン・やり直し・中止を追加。終わると自動でモード終了）
           ・状況表示を地図に浮かぶカードにし、不要なときは消えるようにした
+  v1.2.0  地図の見やすさを改善。
+          ・ルート表示中のウインドウを1行の小さなカードにした（地図やルートに重ならない）
+          ・ルート表示時と徒歩／車の切り替え時に、地図の位置・拡大率を動かさないようにした
+          ・画面中心に目立たない小さな十字（レティクル）を復活
+          ・「十字の位置で探す」ボタンを追加し、現在地とは別の指定位置を中心に探せるようにした
+          ・「ルート沿い」ボタンを地図右下に移動し、下のパネルをさらに小さくした
 
 ■ 使っている無料サービス（すべてカード登録不要）
   ・Leaflet 1.9.4 …………… 地図の表示（CDN: cdnjs）
@@ -145,7 +153,7 @@ button{ font-family:inherit; cursor:pointer; border:none; background:none; }
   font-size:13px; font-weight:700; color:var(--ink);
 }
 
-/* ---- 右下：現在地ボタン（丸） ---- */
+/* ---- 右下：ルート沿い・現在地ボタン（縦に並ぶ） ---- */
 #meBtn{
   position:fixed; z-index:20; right:12px;
   width:46px; height:46px; border-radius:50%;
@@ -153,26 +161,66 @@ button{ font-family:inherit; cursor:pointer; border:none; background:none; }
   color:var(--me); font-size:19px;
   display:flex; align-items:center; justify-content:center;
 }
+#abBtn{
+  position:fixed; z-index:20; right:12px;
+  background:var(--card); box-shadow:var(--shadow);
+  border-radius:999px; padding:11px 15px;
+  font-size:13px; font-weight:700;
+  color:var(--me); border:2px solid var(--me);
+}
+#abBtn.on{ background:var(--me); color:#fff; }
 
-/* ---- 下部：状況カード（必要なときだけ出る） ---- */
+/* ---- 画面中心の小さな十字（レティクル）。表示だけで押せない ---- */
+#reticle{
+  position:fixed; left:50%; top:50%; z-index:10;
+  width:18px; height:18px; transform:translate(-50%,-50%);
+  pointer-events:none; opacity:.35;
+}
+#reticle::before,#reticle::after{
+  content:""; position:absolute; background:var(--ink);
+}
+#reticle::before{ left:50%; top:0; width:1.5px; height:100%; transform:translateX(-50%); }
+#reticle::after{ top:50%; left:0; height:1.5px; width:100%; transform:translateY(-50%); }
+
+/* ---- 下部：状況カード（必要なときだけ出る・小さめ） ---- */
 #statusCard{
   position:fixed; z-index:20; left:12px; right:12px;
   background:var(--card); box-shadow:var(--shadow);
-  border-radius:var(--radius); padding:11px 14px;
-  font-size:13.5px; line-height:1.55; color:#33413A;
-  max-height:32vh; overflow-y:auto;
+  border-radius:var(--radius); padding:9px 12px;
+  font-size:13px; line-height:1.5; color:#33413A;
+  max-height:30vh; overflow-y:auto;
   display:none;
 }
 #statusCard.show{ display:block; }
-#statusCard .src{ font-size:11px; color:#8A968D; margin-top:3px; }
+#statusCard .src{ font-size:10.5px; color:#8A968D; margin-top:3px; }
 #statusCard .act{ /* カード内の小ボタン共通 */
-  display:inline-block; margin:7px 6px 0 0;
-  border-radius:999px; padding:8px 14px;
-  font-size:13px; font-weight:700;
+  display:inline-block; margin:6px 6px 0 0;
+  border-radius:999px; padding:6.5px 12px;
+  font-size:12.5px; font-weight:700;
   background:#EFEEE6; color:var(--ink);
 }
 #statusCard .act.primary{ background:var(--me); color:#fff; }
 #statusCard .act.danger{ background:#FBEAE8; color:var(--danger); }
+
+/* ルート表示中だけの、1行のコンパクト表示 */
+.rt{ display:flex; align-items:center; gap:8px; }
+.rt-txt{ flex:1; min-width:0; }
+.rt-txt b{
+  display:block; font-size:13px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.rt-txt span{ display:block; font-size:11.5px; color:#7A877D; }
+.rt-gmap{
+  flex:none; border-radius:999px; padding:7px 11px;
+  font-size:11.5px; font-weight:700;
+  background:#EFEEE6; color:#3C4A41;
+}
+.rt-x{
+  flex:none; width:32px; height:32px; border-radius:50%;
+  background:#FBEAE8; color:var(--danger);
+  font-size:15px; font-weight:700;
+  display:flex; align-items:center; justify-content:center;
+}
 
 /* ---- 下部：操作パネル（コンパクトな2段） ---- */
 #panel{
@@ -184,19 +232,20 @@ button{ font-family:inherit; cursor:pointer; border:none; background:none; }
 }
 .panel-row{ display:flex; align-items:center; gap:8px; }
 #searchBtn{
-  flex:1; background:var(--store); color:#fff;
-  border-radius:12px; padding:13px 8px;
-  font-size:15.5px; font-weight:700; letter-spacing:.04em;
+  flex:1.1; background:var(--store); color:#fff;
+  border-radius:12px; padding:12px 6px;
+  font-size:14px; font-weight:700; letter-spacing:.02em;
   font-family:"Zen Maru Gothic",sans-serif;
   box-shadow:0 2px 6px rgba(15,163,107,.3);
 }
 #searchBtn:active{ transform:translateY(1px); }
-#abBtn{
-  flex:none; border-radius:12px; padding:13px 14px;
+#searchHereBtn{
+  flex:1; border-radius:12px; padding:12px 6px;
   font-size:13.5px; font-weight:700;
-  color:var(--me); border:2px solid var(--me); background:#fff;
+  font-family:"Zen Maru Gothic",sans-serif;
+  color:var(--store); border:2px solid var(--store); background:#fff;
 }
-#abBtn.on{ background:var(--me); color:#fff; }
+#searchHereBtn:active{ transform:translateY(1px); }
 
 .sub{ font-size:12px; color:#5C6B60; }
 .sub .lbl{ flex:none; font-weight:600; }
@@ -331,14 +380,16 @@ input[type=range]{ flex:1; accent-color:var(--store); height:22px; min-width:0; 
 <!-- ═══════ 浮かぶUI ═══════ -->
 <div id="brand"><div class="logo-dot"></div><b>コンビニレーダー</b></div>
 <button id="historyBtn">履歴</button>
+<div id="reticle"></div>
+<button id="abBtn">ルート沿い</button>
 <button id="meBtn" title="現在地へ">◉</button>
 
 <div id="statusCard"></div>
 
 <div id="panel">
   <div class="panel-row">
-    <button id="searchBtn">このあたりを探す</button>
-    <button id="abBtn">ルート沿い</button>
+    <button id="searchBtn">現在地で探す</button>
+    <button id="searchHereBtn">十字の位置で探す</button>
   </div>
   <div class="panel-row sub">
     <span class="lbl">範囲</span>
@@ -370,7 +421,7 @@ input[type=range]{ flex:1; accent-color:var(--store); height:22px; min-width:0; 
 /* ════════════════════════════════════════════════════════════
    基本設定
    ════════════════════════════════════════════════════════════ */
-const APP_VERSION = '1.1.0';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
+const APP_VERSION = '1.2.0';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
 document.getElementById('verLabel').textContent = 'v' + APP_VERSION;
 
 // Yahoo!のClient ID。空文字 '' にすると自動でOSM(Overpass)に切り替わる（動作確認用）
@@ -428,12 +479,13 @@ function setStatus(html){
 
 // 状況カードと現在地ボタンを、操作パネルのすぐ上に並べる
 function placeFloating(){
-  // 操作パネルの上端の位置を測り、その少し上に状況カードと◉ボタンを置く
+  // 操作パネルの上端の位置を測り、その少し上に状況カード・◉・「ルート沿い」を積む
   const panelTop = $('panel').getBoundingClientRect().top;
   const bottom = window.innerHeight - panelTop + 10;
   $('statusCard').style.bottom = bottom + 'px';
   const cardH = $('statusCard').classList.contains('show') ? $('statusCard').offsetHeight + 10 : 0;
   $('meBtn').style.bottom = (bottom + cardH) + 'px';
+  $('abBtn').style.bottom = (bottom + cardH + 46 + 10) + 'px'; // ◉(46px)の上に置く
 }
 
 // 赤いトースト（1.5秒で自動的に消える）
@@ -471,11 +523,13 @@ function esc(s){
     c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-// いまの「検索の中心」。優先順位: ◎ピン > 現在地 > 地図の中心（保険）
-function searchCenter(){
-  if (centerPin) { const p = centerPin.getLatLng(); return {lat:p.lat, lng:p.lng, kind:'◎ピン'}; }
-  if (me)        return {lat:me.lat, lng:me.lng, kind:'現在地'};
-  const c = map.getCenter(); return {lat:c.lat, lng:c.lng, kind:'地図の中心'};
+// 最後に検索した中心（「Google Mapでこの周辺も見る」で使う）
+let lastCenter = null;
+function gmapCenter(){
+  if (lastCenter) return lastCenter;
+  if (centerPin){ const p = centerPin.getLatLng(); return {lat:p.lat, lng:p.lng}; }
+  if (me) return {lat:me.lat, lng:me.lng};
+  const c = map.getCenter(); return {lat:c.lat, lng:c.lng};
 }
 
 // ルートの出発地。◎ピンがあればピンから、なければ現在地から（自動で決まる）
@@ -510,11 +564,11 @@ function locate(moveMap){
       color: '#2F7DF6', weight: 1, opacity: .5, fillOpacity: .08
     }).addTo(map);
     if (moveMap) map.setView([me.lat, me.lng], 16);
-    setStatus('現在地を表示しました。「このあたりを探す」でまわりのコンビニを探せます。<div class="src">ヒント: 地図を長押しすると、好きな場所に◎ピンを置いてそこを探せます</div>');
+    setStatus('現在地を表示しました。「現在地で探す」でまわりのコンビニを探せます。<div class="src">別の場所を探すには: 地図を動かして「十字の位置で探す」／地図を長押しで◎ピン</div>');
   }, err => {
     setStatus('現在地が取れませんでした（' + esc(err.message) + '）。<br>' +
       'ブラウザの位置情報の許可を確認してください。位置情報は https のページでしか使えません。<br>' +
-      'とりあえず東京駅を表示しています。<b>地図を長押し</b>してピンを置けば、その場所を探せます。');
+      'とりあえず東京駅を表示しています。地図を動かして<b>「十字の位置で探す」</b>を押せば、その場所を探せます。');
   }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
 }
 
@@ -537,13 +591,13 @@ function placePin(latlng){
     centerPin.bindPopup(
       '<div class="pp-name">◎ ここを中心に探す</div>' +
       '<div class="pp-dist">ドラッグで移動できます。ルートの出発地もここになります。</div>' +
-      '<button class="pp-btn pp-route" onclick="map.closePopup(); doSearch()">このあたりを探す</button>' +
+      '<button class="pp-btn pp-route" onclick="map.closePopup(); doSearch(&quot;pin&quot;)">このあたりを探す</button>' +
       '<button class="pp-btn pp-remove" onclick="removePin()">ピンを外す</button>'
     );
   }else{
     centerPin.setLatLng(latlng);
   }
-  setStatus('◎ピンを置きました。「このあたりを探す」でピンのまわりを探します。<div class="src">ピンをタップすると外せます／ルートの出発地もピンになります</div>');
+  setStatus('◎ピンを置きました。ピンをタップして「このあたりを探す」を押すと、ピンのまわりを探します。<div class="src">ドラッグで移動／ルートの出発地もピンになります</div>');
 }
 function removePin(){
   if (centerPin){ map.removeLayer(centerPin); centerPin = null; }
@@ -673,14 +727,29 @@ function clearResults(){
 
 // Googleマップで周辺のコンビニを見る（アプリで漏れがあったときの逃げ道）
 function openGmapArea(){
-  const c = searchCenter();
+  const c = gmapCenter();
   window.open('https://www.google.com/maps/search/コンビニ/@' + c.lat + ',' + c.lng + ',16z', '_blank');
 }
 
-// 「このあたりを探す」本体
-async function doSearch(){
+// 「探す」本体。kind: 'me'=現在地 / 'map'=十字の位置（地図の中心） / 'pin'=◎ピン
+async function doSearch(kind){
   if (abStep){ showToast('ルート沿い検索の途中です。先に「中止」してください'); return; }
-  const c = searchCenter();
+
+  let c, label;
+  if (kind === 'pin' && centerPin){
+    const p = centerPin.getLatLng();
+    c = { lat: p.lat, lng: p.lng }; label = '◎ピン';
+  }else if (kind === 'map'){
+    const p = map.getCenter();
+    c = { lat: p.lat, lng: p.lng }; label = '十字の位置';
+  }else{
+    if (!me){
+      showToast('現在地がまだ取れていません。◉ボタンを押すか、「十字の位置で探す」を使ってください');
+      return;
+    }
+    c = { lat: me.lat, lng: me.lng }; label = '現在地';
+  }
+  lastCenter = c;
   const r = Number($('radius').value);
 
   if (searchCircle) map.removeLayer(searchCircle);
@@ -690,7 +759,7 @@ async function doSearch(){
   }).addTo(map);
   map.fitBounds(searchCircle.getBounds(), FIT_PAD);
 
-  setStatus(c.kind + 'のまわり ' + fmtDist(r) + ' を探しています…');
+  setStatus(label + 'のまわり ' + fmtDist(r) + ' を探しています…');
   try{
     const list = YAHOO_CLIENT_ID
       ? dedup(await yolpCircle(c.lat, c.lng, r))
@@ -743,14 +812,24 @@ function clearRouteAndSay(){
 }
 
 // ルートのGeoJSONを紫の線で描く（履歴の再表示でも同じ関数を使う）
-function drawRoute(geo, dest){
+// fit=true のときだけ地図を動かす。通常のルート表示では動かさない（見ている場所を保つ）
+function drawRoute(geo, dest, fit){
   if (routeLine) map.removeLayer(routeLine);
   if (routeDot)  map.removeLayer(routeDot);
   routeLine = L.geoJSON(geo, { style:{ color:'#7048E8', weight:5, opacity:.85 } }).addTo(map);
   routeDot = L.circleMarker([dest.lat, dest.lng], {
     radius: 7, color:'#fff', weight:2, fillColor:'#7048E8', fillOpacity:1
   }).addTo(map);
-  map.fitBounds(routeLine.getBounds(), FIT_PAD);
+  if (fit) map.fitBounds(routeLine.getBounds(), FIT_PAD);
+}
+
+// ルート表示中の、1行の小さな状況表示を組み立てる
+function routeStatusHtml(name, sub, lat, lng){
+  return '<div class="rt">' +
+    '<div class="rt-txt"><b>' + esc(name) + '</b><span>' + sub + '</span></div>' +
+    '<button class="rt-gmap" onclick="openGmapTo(' + lat + ',' + lng + ')">Gマップ</button>' +
+    '<button class="rt-x" onclick="clearRouteAndSay()">×</button>' +
+  '</div>';
 }
 
 // 店までのルートを表示する（ピンのポップアップから呼ばれる）
@@ -770,14 +849,13 @@ async function showRouteTo(dest, saveHist){
   setStatus(esc(dest.name) + ' までの' + modeLabel + 'ルートを計算しています…');
   try{
     const r = await osrmRoute(from, dest, travelMode);
-    drawRoute(r.geometry, dest);
+    drawRoute(r.geometry, dest, false); // 地図は動かさない（見ている場所を保つ）
     currentDest = dest;
-    setStatus('<b>' + esc(dest.name) + '</b> まで ' + modeLabel + 'ルート: 約 ' +
-      fmtDist(r.distance) + ' ・ 約 ' + fmtDur(r.duration) +
-      '（' + fromLabel + 'から）' +
-      '<br><button class="act danger" onclick="clearRouteAndSay()">× ルートを消す</button>' +
-      '<button class="act" onclick="openGmapTo(' + dest.lat + ',' + dest.lng + ')">Google Mapで開く</button>' +
-      '<div class="src">経路: OSRM (OpenStreetMap) ／ 徒歩・車を切り替えると引き直します</div>');
+    setStatus(routeStatusHtml(
+      dest.name,
+      modeLabel + ' 約 ' + fmtDist(r.distance) + '・約 ' + fmtDur(r.duration) + '（' + fromLabel + 'から）',
+      dest.lat, dest.lng
+    ));
     if (saveHist) addHistory(dest, r, from.kind);
   }catch(e){
     setStatus('ルートの計算に失敗しました。ルート検索の無料サーバーが混みあっている可能性があります。<br>' +
@@ -858,13 +936,14 @@ function replayHist(i){
   const h = loadHist()[i];
   if (!h) return;
   closeSheet();
-  drawRoute(h.geo, { lat: h.d[0], lng: h.d[1] });
+  drawRoute(h.geo, { lat: h.d[0], lng: h.d[1] }, true); // 再表示のときだけルート全体が見えるよう移動
   currentDest = { lat: h.d[0], lng: h.d[1], name: h.name };
   const mode = h.mode === 'car' ? '車' : '徒歩';
-  setStatus('履歴から再表示: <b>' + esc(h.name) + '</b> まで ' + mode + 'ルート: 約 ' +
-    fmtDist(h.dist) + ' ・ 約 ' + fmtDur(h.dur) +
-    '<br><button class="act danger" onclick="clearRouteAndSay()">× ルートを消す</button>' +
-    '<div class="src">' + fmtWhen(h.t) + ' に表示したルート</div>');
+  setStatus(routeStatusHtml(
+    h.name,
+    mode + ' 約 ' + fmtDist(h.dist) + '・約 ' + fmtDur(h.dur) + '（' + fmtWhen(h.t) + 'の履歴）',
+    h.d[0], h.d[1]
+  ));
 }
 function delHist(i){
   const list = loadHist();
@@ -1016,7 +1095,8 @@ function abRetry(){ if (abA && abB) runAbSearch(); }
 $('radius').addEventListener('input', () => {
   $('radiusVal').textContent = $('radius').value + ' m';
 });
-$('searchBtn').addEventListener('click', doSearch);
+$('searchBtn').addEventListener('click', () => doSearch('me'));
+$('searchHereBtn').addEventListener('click', () => doSearch('map'));
 $('meBtn').addEventListener('click', () => locate(true));
 $('abBtn').addEventListener('click', () => abStep ? cancelAb() : startAb());
 
