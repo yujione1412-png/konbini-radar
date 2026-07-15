@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- コンビニレーダーのアプリアイコン v2（案7・明るいレーダー）
+       クリーム色の背景に、緑のレーダーリングと走査、中心はオレンジの位置ピン。
+       小さな緑の点は「見つかったコンビニ」 -->
+  <defs>
+    <clipPath id="sq"><rect x="0" y="0" width="512" height="512" rx="116"/></clipPath>
+  </defs>
+  <g clip-path="url(#sq)">
+    <!-- 背景 -->
+    <rect width="512" height="512" fill="#FFF6DE"/>
+
+    <!-- レーダーの同心円 -->
+    <g fill="none" stroke="#0FA36B">
+      <circle cx="256" cy="256" r="192" stroke-opacity=".25" stroke-width="14"/>
+      <circle cx="256" cy="256" r="128" stroke-opacity=".5" stroke-width="14"/>
+    </g>
+
+    <!-- レーダーの走査（扇形と先端の線） -->
+    <path d="M256 256 L448 256 A192 192 0 0 0 391.8 120.2 Z" fill="#0FA36B" opacity=".18"/>
+    <line x1="256" y1="256" x2="391.8" y2="120.2" stroke="#0FA36B" stroke-width="12" stroke-linecap="round"/>
+
+    <!-- 見つかったコンビニの点 -->
+    <circle cx="356" cy="188" r="17" fill="#2ED397" stroke="#1D3229" stroke-width="7"/>
+    <circle cx="168" cy="342" r="14" fill="#0FA36B" stroke="#1D3229" stroke-width="6"/>
+
+    <!-- 中心のオレンジのピン（探している場所） -->
+    <path d="M256 349.4 C 199.3 285.6 202 265.7 202 236 A 54 54 0 1 1 310 236 C 310 265.7 312.7 285.6 256 349.4 Z"
+      fill="#E8590C" stroke="#1D3229" stroke-width="12" stroke-linejoin="round"/>
+    <circle cx="256" cy="236" r="22.7" fill="#FFFFFF"/>
+  </g>
+</svg>
