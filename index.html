@@ -2,7 +2,7 @@
 <!--
 ═══════════════════════════════════════════════════════════════════════════
   コンビニレーダー （konbini-radar）
-  現在バージョン: v1.4.1
+  現在バージョン: v1.4.2
 ═══════════════════════════════════════════════════════════════════════════
 
 ■ このファイルでできること
@@ -75,6 +75,9 @@
   v1.4.1  アイコンを明るいデザインに変更（10案から選定）。
           クリーム色の背景＋緑のレーダー＋中心にオレンジの位置ピン。
           原本は icons/icon.svg（各サイズのPNGはここから書き出す）
+  v1.4.2  ルート沿い検索で見つけた店を「Google Mapでルートを開く」とき、
+          ◎ピンの有無にかかわらず「現在地から」のルートを開くように修正。
+          （移動中の利用を想定。アプリ内のルート表示の出発地は従来どおり ◎ピン優先）
 
 ■ 使っている無料サービス（すべてカード登録不要）
   ・Leaflet 1.9.4 …………… 地図の表示（CDN: cdnjs）
@@ -447,7 +450,7 @@ input[type=range]{ flex:1; accent-color:var(--store); height:22px; min-width:0; 
 /* ════════════════════════════════════════════════════════════
    基本設定
    ════════════════════════════════════════════════════════════ */
-const APP_VERSION = '1.4.1';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
+const APP_VERSION = '1.4.2';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
 document.getElementById('verLabel').textContent = 'v' + APP_VERSION;
 
 // Yahoo!のClient ID。空文字 '' にすると自動でOSM(Overpass)に切り替わる（動作確認用）
@@ -923,8 +926,19 @@ function openGmapRoute(i){
   openGmapTo(s.lat, s.lng);
 }
 function openGmapTo(lat, lng){
-  const from = routeOrigin();
-  if (!from) return;
+  let from;
+  if (lastSearch && lastSearch.type === 'ab'){
+    // ルート沿い検索で見つけた店の場合：Googleマップは「現在地から」のルートを開く
+    // （◎ピンや出発地点からではなく、移動中のいまの場所から向かうのが自然なため）
+    if (!me){
+      showToast('現在地がまだ取れていません。◉ボタンで取得してから開いてください');
+      return;
+    }
+    from = { lat: me.lat, lng: me.lng };
+  }else{
+    from = routeOrigin();
+    if (!from) return;
+  }
   const tm = travelMode === 'car' ? 'driving' : 'walking';
   window.open('https://www.google.com/maps/dir/?api=1'
     + '&origin=' + from.lat + ',' + from.lng
