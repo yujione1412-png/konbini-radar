@@ -2,7 +2,7 @@
 <!--
 ═══════════════════════════════════════════════════════════════════════════
   コンビニレーダー （konbini-radar）
-  現在バージョン: v1.4.2
+  現在バージョン: v1.5.0
 ═══════════════════════════════════════════════════════════════════════════
 
 ■ このファイルでできること
@@ -14,6 +14,8 @@
   ・地図を「長押し」して◎ピンを置くと、その場所を検索の中心・ルートの出発地にできる
   ・「ルート沿い」ボタンで、出発地→到着地の道沿いのコンビニを探せる
     （出発地は「現在地から出発」ワンタップでもOK。画面の案内に従うだけ）
+  ・ルート沿いで見つけた店のピンから「寄り道する」を押すと、
+    出発地→その店→到着地のルートを表示し、元のルートより何m・何分増えるかが分かる
   ・見つけたコンビニまでのルート（徒歩／車）をアプリ内に表示する
   ・「Google Mapでルートを開く」でGoogleマップにも切り替えられる（ナビは自動開始しない）
   ・ルートを表示した履歴を端末内（localStorage）に残し、あとから再表示できる
@@ -24,6 +26,8 @@
   ・◎ピン: 地図を長押しで置く／動かす。ピンをタップすると「このあたりを探す」「外す」を選べる
   ・ルートの出発地: ◎ピンがあればピンから、なければ現在地から（自動）
   ・ルート表示や徒歩／車の切り替えでは、地図の位置と拡大率は動かさない（見ている場所を保つ）
+  ・寄り道: ルート沿い検索の後、店のピン→「寄り道する」。元のルート（青）は点線になり、
+    寄り道ルートは紫で表示。徒歩／車を切り替えると、元のルートも寄り道も引き直して比べ直す
 
 ■ 次にやること（アイデア）
   ・お気に入りの店を登録できるようにする
@@ -78,19 +82,28 @@
   v1.4.2  ルート沿い検索で見つけた店を「Google Mapでルートを開く」とき、
           ◎ピンの有無にかかわらず「現在地から」のルートを開くように修正。
           （移動中の利用を想定。アプリ内のルート表示の出発地は従来どおり ◎ピン優先）
+  v1.5.0  「寄り道」機能を追加。
+          ・ルート沿い検索で見つけた店のピンに「寄り道する」ボタンを追加
+          ・押すと 出発地→その店→到着地 のルートを紫で表示（元のルートは青の点線になる）
+          ・元のルートより何m・何分増えるかを、下の1行カードに表示
+          ・寄り道中に徒歩／車を切り替えると、元のルートと寄り道ルートの両方を引き直して比べ直す
+          ・寄り道ルートも履歴に保存（「寄り道」バッジ・増えた距離と時間つき）
+          ・カードの「Gマップ」は 現在地→その店→到着地 のルートで開く（ナビは自動開始しない）
+          ・カードの×で寄り道ルートだけを消し、元のルートと検索結果に戻る
 
 ■ 使っている無料サービス（すべてカード登録不要）
   ・Leaflet 1.9.4 …………… 地図の表示（CDN: cdnjs）
   ・OpenStreetMap …………… 地図タイル（帰属表示あり）
   ・YOLP Yahoo!ローカルサーチAPI … コンビニ検索の主データ源（1日5万件まで無料）
   ・Overpass API（OSM） …… Client ID未設定時の予備のコンビニ検索
-  ・OSRM（FOSSGIS公開サーバー） … ルート検索（徒歩／車）
+  ・OSRM（FOSSGIS公開サーバー） … ルート検索（徒歩／車・経由地つきも可）
   ・Google Maps URLs ……… Googleマップをリンクで開くだけ（キー不要）
 
 ■ 知っておいてほしい限界
   ・位置情報は https のページでしか取れません（Vercelなら大丈夫）
   ・YOLPでも店の取りこぼしはゼロになりません（0件・失敗のときはGoogle Mapを開くボタンが出ます）
   ・OSRM/Overpassの公開サーバーは混みあうと失敗することがあります（時間をおいて再試行）
+  ・寄り道で増える距離・時間はOSRMの計算による目安です（信号待ちや混雑は含みません）
   ・履歴はこの端末のブラウザの中だけに保存されます（他の端末には出ません）
 ═══════════════════════════════════════════════════════════════════════════
 -->
@@ -126,7 +139,7 @@
   --store:  #0FA36B;  /* 緑：コンビニのピン・検索ボタン・探索円 */
   --me:     #2F7DF6;  /* 青：現在地・A地点・ルート沿いの線 */
   --center: #E8590C;  /* 橙：◎ピン（長押しで置く） */
-  --route:  #7048E8;  /* 紫：店へのルート線・徒歩/車の選択色 */
+  --route:  #7048E8;  /* 紫：店へのルート線・寄り道ルート・徒歩/車の選択色 */
   --danger: #D93025;  /* 赤：エラー・削除 */
   --card:   rgba(255,255,255,.96);            /* 浮かぶカードの白 */
   --shadow: 0 4px 18px rgba(29,50,41,.22);    /* カードの影 */
@@ -239,6 +252,8 @@ button{ font-family:inherit; cursor:pointer; border:none; background:none; }
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
 .rt-txt span{ display:block; font-size:11.5px; color:#7A877D; }
+/* 寄り道で増えた距離・時間（ひと目で分かるよう紫の太字） */
+.rt-txt .plus{ font-style:normal; font-weight:700; color:var(--route); font-size:12.5px; }
 .rt-gmap{
   flex:none; border-radius:999px; padding:7px 11px;
   font-size:11.5px; font-weight:700;
@@ -347,6 +362,8 @@ input[type=range]{ flex:1; accent-color:var(--store); height:22px; min-width:0; 
   padding:9px 10px; font-size:13px; font-weight:700; margin-top:6px; text-align:center;
 }
 .pp-route{ background:var(--route); color:#fff; }
+.pp-detour{ background:var(--route); color:#fff; }          /* 寄り道する（ルート沿いの結果だけ） */
+.pp-sub{ background:#F0ECFC; color:var(--route); }           /* 寄り道があるときの「ルートを表示する」 */
 .pp-gmap{ background:#EFEEE6; color:#3C4A41; }
 .pp-remove{ background:#FBEAE8; color:var(--danger); }
 .leaflet-popup-content{ margin:12px 14px; min-width:190px; }
@@ -397,6 +414,7 @@ input[type=range]{ flex:1; accent-color:var(--store); height:22px; min-width:0; 
 .badge{ font-size:10.5px; font-weight:600; border-radius:6px; padding:2px 7px; flex:none; }
 .badge.me{     background:#E8EEF6; color:#456492; } /* 現在地から：淡い青系 */
 .badge.center{ background:#EAE7F2; color:#5a5288; } /* ◎ピンから：淡い藍系 */
+.badge.via{    background:#ECEAF6; color:#5B4B9A; } /* 寄り道：淡い紫系 */
 .hist-del{ color:var(--danger); font-size:12.5px; font-weight:600; padding:8px 6px; flex:none; }
 .hist-empty{ padding:36px 20px; text-align:center; color:#8A968D; font-size:13.5px; }
 </style>
@@ -450,7 +468,7 @@ input[type=range]{ flex:1; accent-color:var(--store); height:22px; min-width:0; 
 /* ════════════════════════════════════════════════════════════
    基本設定
    ════════════════════════════════════════════════════════════ */
-const APP_VERSION = '1.4.2';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
+const APP_VERSION = '1.5.0';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
 document.getElementById('verLabel').textContent = 'v' + APP_VERSION;
 
 // Yahoo!のClient ID。空文字 '' にすると自動でOSM(Overpass)に切り替わる（動作確認用）
@@ -466,18 +484,24 @@ let me = null;            // 現在地 {lat, lng, acc}。取れていなけれ�
 let travelMode = 'foot';  // 移動手段: 'foot'=徒歩 / 'car'=車
 let centerPin = null;     // ◎ピン（長押しで置く）。無ければ null
 let currentDest = null;   // いまルートを表示している店 {lat,lng,name}。無ければ null
+let currentDetour = null; // いま表示している寄り道 {s:店, ls:元のルート沿い検索}。無ければ null
 let stores = [];          // 直近の検索で見つかった店の一覧
 
 // ルート沿い検索の進み具合: 0=していない / 1=出発地待ち / 2=到着地待ち / 3=検索中
 let abStep = 0;
 let abA = null, abB = null; // 出発地・到着地 {lat,lng}
+let abAKind = 'point';      // 出発地の決め方: 'me'=現在地から出発 / 'point'=地図をタップ
 
 /* 地図の部品（あとで消せるように覚えておく） */
 let meMarker = null, meCircle = null;       // 現在地の点と精度円
 let searchCircle = null;                    // 探索範囲の緑の円
 let storeLayer = null;                      // コンビニのピンをまとめる層
-let routeLine = null, routeDot = null;      // 店へのルート（紫の線＋点）
+let routeLine = null, routeDot = null;      // 店へのルート・寄り道ルート（紫の線＋点）
 let abLine = null, abMarkerA = null, abMarkerB = null; // ルート沿いの線とピン
+
+// 状況カードの中身を覚えておく（寄り道の×で件数表示に戻す、などに使う）
+let lastCountHtml = '';   // 「コンビニ◯件」の1行カード
+let lastDetourHtml = '';  // 寄り道の1行カード
 
 /* ════════════════════════════════════════════════════════════
    地図の初期化
@@ -545,6 +569,19 @@ function fmtDur(sec){
   if (min < 1)  return '1分未満';
   if (min < 60) return min + '分';
   return Math.floor(min/60) + '時間' + (min % 60 ? (min % 60) + '分' : '');
+}
+// 寄り道で「増えた距離」を +320 m のように書く（まれに減ることもあるので − も扱う）
+function fmtPlusDist(m){
+  const r = Math.round(m);
+  if (r === 0) return '±0 m';
+  return (r > 0 ? '+' : '−') + fmtDist(Math.abs(r));
+}
+// 寄り道で「増えた時間」を +4分 のように書く
+function fmtPlusDur(sec){
+  const min = Math.round(Math.abs(sec) / 60);
+  const sign = sec < 0 ? '−' : '+';
+  if (min < 1) return sign + '1分未満';
+  return sign + fmtDur(Math.abs(sec));
 }
 // 文字をHTMLに安全に入れる（店名に記号があっても崩れないように）
 function esc(s){
@@ -732,6 +769,9 @@ function renderStores(list, srcLabel, headSub){
   stores = list;
   if (me) stores.sort((a, b) => distM(me, a) - distM(me, b)); // 現在地があれば近い順
 
+  // ルート沿い検索の結果なら、ピンに「寄り道する」ボタンを付ける
+  const isAb = lastSearch && lastSearch.type === 'ab';
+
   stores.forEach((s, i) => {
     const m = L.circleMarker([s.lat, s.lng], {
       radius: 9, color: '#fff', weight: 2.5,
@@ -741,16 +781,19 @@ function renderStores(list, srcLabel, headSub){
     m.bindPopup(
       '<div class="pp-name">' + esc(s.name) + '</div>' +
       (d ? '<div class="pp-dist">' + d + '</div>' : '') +
-      '<button class="pp-btn pp-route" onclick="routeToStore(' + i + ')">ルートを表示する</button>' +
+      (isAb ? '<button class="pp-btn pp-detour" onclick="detourToStore(' + i + ')">寄り道する</button>' : '') +
+      '<button class="pp-btn ' + (isAb ? 'pp-sub' : 'pp-route') + '" onclick="routeToStore(' + i + ')">ルートを表示する</button>' +
       '<button class="pp-btn pp-gmap" onclick="openGmapRoute(' + i + ')">Google Mapでルートを開く</button>'
     );
   });
 
   // 1行の小さなカードで件数だけ知らせる（×で表示を閉じられる。ピンは残る）
-  setStatus('<div class="rt">' +
+  lastCountHtml = '<div class="rt">' +
     '<div class="rt-txt"><b>コンビニ ' + stores.length + '件</b>' +
     '<span>' + (headSub ? headSub + '・' : '') + 'ピンをタップで詳細・' + srcLabel + '</span></div>' +
-    '<button class="rt-x" onclick="setStatus(\'\')">×</button></div>');
+    '<button class="rt-x" onclick="setStatus(\'\')">×</button></div>';
+  // 寄り道を表示中なら、寄り道のカードを出したままにする（増えた距離・時間を見失わないように）
+  setStatus(currentDetour && lastDetourHtml ? lastDetourHtml : lastCountHtml);
 }
 
 // 検索結果・円・ルートをまとめて消して、地図をきれいにする
@@ -770,7 +813,9 @@ function openGmapArea(){
 }
 
 // 直近の検索内容（範囲スライダーでのかけ直しに使う）
-// {type:'circle', c:{lat,lng}, label} または {type:'ab', coords, head}
+// {type:'circle', c:{lat,lng}, label}
+// または {type:'ab', coords, head, a, b, aKind, base:{mode,dist,dur}}
+//   （a=出発地, b=到着地, base=寄り道なしの元のルートの距離・時間。寄り道との比較に使う）
 let lastSearch = null;
 
 // 「探す」入口。kind: 'me'=現在地 / 'map'=十字の位置（地図の中心） / 'pin'=◎ピン
@@ -833,12 +878,14 @@ async function searchArea(c, label, fit){
 /* ════════════════════════════════════════════════════════════
    ルート表示（店へ・OSRM）
    ════════════════════════════════════════════════════════════ */
-async function osrmRoute(from, to, mode){
+// 通る地点を順番に並べた配列 points（2点以上）のルートを取る。
+// 3点にすると「出発→店→到着」のように途中を経由するルートになる（寄り道で使う）
+async function osrmRouteVia(points, mode){
   const prof = mode === 'car'
     ? 'routed-car/route/v1/driving'
     : 'routed-foot/route/v1/foot';
   const url = 'https://routing.openstreetmap.de/' + prof + '/'
-    + from.lng + ',' + from.lat + ';' + to.lng + ',' + to.lat
+    + points.map(p => p.lng + ',' + p.lat).join(';')   // OSRMは「経度,緯度」の順
     + '?overview=full&geometries=geojson';
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 15000);
@@ -849,6 +896,10 @@ async function osrmRoute(from, to, mode){
   if (!data.routes || !data.routes.length) throw new Error('ルートなし');
   return data.routes[0]; // {geometry(GeoJSON), distance(m), duration(秒)}
 }
+// 2点間のルート（従来どおりの呼び方）
+function osrmRoute(from, to, mode){
+  return osrmRouteVia([from, to], mode);
+}
 
 // 表示中のルート類（紫の線・青の線・出発到着ピン）を消す
 function clearRouteLayers(){
@@ -858,12 +909,21 @@ function clearRouteLayers(){
   if (abMarkerA){ map.removeLayer(abMarkerA); abMarkerA = null; }
   if (abMarkerB){ map.removeLayer(abMarkerB); abMarkerB = null; }
   currentDest = null;
+  currentDetour = null;
   // ルート沿いの検索は元のルートが消えたので、スライダーでのかけ直し対象から外す
   if (lastSearch && lastSearch.type === 'ab') lastSearch = null;
 }
 function clearRouteAndSay(){
   clearRouteLayers();
   setStatus('ルートを消しました。');
+}
+
+// 元のルート（青い線）を、寄り道中は点線で薄く、それ以外はふつうに表示する
+function dimBase(on){
+  if (!abLine) return;
+  abLine.setStyle(on
+    ? { opacity: .45, dashArray: '4 8' }
+    : { opacity: .85, dashArray: null });
 }
 
 // ルートのGeoJSONを紫の線で描く（履歴の再表示でも同じ関数を使う）
@@ -906,6 +966,8 @@ async function showRouteTo(dest, saveHist){
     const r = await osrmRoute(from, dest, travelMode);
     drawRoute(r.geometry, dest, false); // 地図は動かさない（見ている場所を保つ）
     currentDest = dest;
+    currentDetour = null; // 寄り道の表示はここで終わり
+    dimBase(false);
     setStatus(routeStatusHtml(
       dest.name,
       modeLabel + ' 約 ' + fmtDist(r.distance) + '・約 ' + fmtDur(r.duration) + '（' + fromLabel + 'から）',
@@ -948,6 +1010,98 @@ function openGmapTo(lat, lng){
 }
 
 /* ════════════════════════════════════════════════════════════
+   寄り道（ルート沿いで見つけた店を経由して、元の到着地へ）
+   流れ: ルート沿い検索 → 店のピン →「寄り道する」
+        → 出発地→店→到着地 のルートを紫で表示（元のルートは青の点線）
+        → 元のルートより何m・何分増えたかを1行カードに表示
+   ════════════════════════════════════════════════════════════ */
+// ピンのポップアップの「寄り道する」から呼ばれる
+function detourToStore(i){
+  const s = stores[i];
+  if (!s || !lastSearch || lastSearch.type !== 'ab') return;
+  map.closePopup();
+  showDetour({ s: { lat: s.lat, lng: s.lng, name: s.name }, ls: lastSearch }, true);
+}
+
+// 寄り道の1行カードを組み立てる
+//  plusD/plusT = 元のルートより増えた距離(m)・時間(秒)、totalD/totalT = 寄り道ルート全体
+//  when = 履歴から再表示したときの日時（ふつうは null）
+function detourStatusHtml(name, modeLabel, plusD, plusT, totalD, totalT, s, b, when){
+  return '<div class="rt">' +
+    '<div class="rt-txt"><b>寄り道：' + esc(name) + '</b>' +
+    '<span><em class="plus">元のルートより ' + fmtPlusDist(plusD) + '・' + fmtPlusDur(plusT) + '</em><br>' +
+      modeLabel + ' 全体 約' + fmtDist(totalD) + '・約' + fmtDur(totalT) +
+      (when ? '（' + when + 'の履歴）' : '') + '</span></div>' +
+    '<button class="rt-gmap" onclick="openGmapDetour(' + s.lat + ',' + s.lng + ',' + b.lat + ',' + b.lng + ')">Gマップ</button>' +
+    '<button class="rt-x" onclick="' + (when ? 'clearRouteAndSay()' : 'clearDetour()') + '">×</button>' +
+  '</div>';
+}
+
+// 寄り道ルートの本体。ctx = {s:店, ls:ルート沿い検索の情報}。saveHist=true なら履歴に残す
+// 徒歩／車を切り替えたときもここが呼ばれ、元のルートと寄り道の両方を新しい手段で比べ直す
+async function showDetour(ctx, saveHist){
+  const ls = ctx.ls;
+  const a = ls.a, b = ls.b;
+  const modeLabel = travelMode === 'car' ? '車' : '徒歩';
+  setStatus(esc(ctx.s.name) + ' に寄り道する' + modeLabel + 'ルートを計算しています…');
+  try{
+    // 元のルートの距離・時間が、いまの移動手段のものでなければ取り直す（比べる基準をそろえるため）
+    const needBase = !ls.base || ls.base.mode !== travelMode;
+    const [baseR, viaR] = await Promise.all([
+      needBase ? osrmRoute(a, b, travelMode) : Promise.resolve(null),
+      osrmRouteVia([a, ctx.s, b], travelMode)   // 出発地 → 店 → 到着地
+    ]);
+    if (baseR){
+      ls.base = { mode: travelMode, dist: baseR.distance, dur: baseR.duration };
+      ls.coords = baseR.geometry.coordinates; // 範囲スライダーでのかけ直しも新しいルートで行う
+      ls.head = '約' + fmtDist(baseR.distance) + '・' + modeLabel + '約' + fmtDur(baseR.duration);
+      if (abLine){ abLine.clearLayers(); abLine.addData(baseR.geometry); } // 青い線も引き直す
+    }
+    drawRoute(viaR.geometry, ctx.s, false); // 地図は動かさない（見ている場所を保つ）。紫の点は寄る店
+    dimBase(true);                          // 元のルートは点線にして、寄り道との違いを見やすく
+    currentDest = null;
+    currentDetour = ctx;
+
+    const plusD = viaR.distance - ls.base.dist;  // 増えた距離
+    const plusT = viaR.duration - ls.base.dur;   // 増えた時間
+    lastDetourHtml = detourStatusHtml(ctx.s.name, modeLabel, plusD, plusT,
+      viaR.distance, viaR.duration, ctx.s, b, null);
+    setStatus(lastDetourHtml);
+    if (saveHist) addDetourHistory(ctx, viaR, plusD, plusT);
+  }catch(e){
+    setStatus('寄り道ルートの計算に失敗しました。ルート検索の無料サーバーが混みあっている可能性があります。<br>' +
+      '少し待ってもう一度試すか、下のボタンでGoogleマップを使ってください。' +
+      '<br><button class="act primary" onclick="openGmapDetour(' + ctx.s.lat + ',' + ctx.s.lng + ',' + b.lat + ',' + b.lng + ')">Google Mapで寄り道ルートを開く</button>');
+  }
+}
+
+// 寄り道ルートだけを消して、元のルートと検索結果の表示に戻る
+function clearDetour(){
+  if (routeLine){ map.removeLayer(routeLine); routeLine = null; }
+  if (routeDot){ map.removeLayer(routeDot); routeDot = null; }
+  currentDetour = null;
+  lastDetourHtml = '';
+  dimBase(false);
+  setStatus(lastCountHtml || '寄り道ルートを消しました。');
+}
+
+// Googleマップで「現在地 → 寄る店 → 到着地」のルートを開く（ナビは自動開始しない）
+// （ルート沿い検索の結果から開くときは常に現在地から、という決まりに合わせている）
+function openGmapDetour(sLat, sLng, bLat, bLng){
+  if (!me){
+    showToast('現在地がまだ取れていません。◉ボタンで取得してから開いてください');
+    return;
+  }
+  const tm = travelMode === 'car' ? 'driving' : 'walking';
+  window.open('https://www.google.com/maps/dir/?api=1'
+    + '&origin=' + me.lat + ',' + me.lng
+    + '&destination=' + bLat + ',' + bLng
+    + '&waypoints=' + sLat + ',' + sLng   // 途中で寄る場所
+    + '&travelmode=' + tm, '_blank');
+  // 注意: dir_action=navigate は付けない（ナビ自動開始は不要、と決めてある）
+}
+
+/* ════════════════════════════════════════════════════════════
    履歴（localStorage・ルートを表示したときだけ保存）
    ════════════════════════════════════════════════════════════ */
 function loadHist(){
@@ -971,6 +1125,26 @@ function addHistory(dest, route, originKind){
   });
   saveHist(list.slice(0, HIST_MAX)); // 新しい順に最大30件
 }
+// 寄り道ルートの履歴。いつもの項目に via（寄り道の情報）を足しただけで、形は同じ
+function addDetourHistory(ctx, route, plusD, plusT){
+  const list = loadHist();
+  list.unshift({
+    t: Date.now(),
+    name: ctx.s.name,              // 寄った店
+    mode: travelMode,
+    origin: ctx.ls.aKind === 'me' ? 'me' : 'point', // 出発地（現在地から／地図でタップした場所から）
+    dist: Math.round(route.distance), // 寄り道ルート全体の距離
+    dur:  Math.round(route.duration), // 寄り道ルート全体の時間
+    d: [ctx.ls.b.lat, ctx.ls.b.lng],  // 最終的な到着地
+    geo: route.geometry,              // 寄り道ルートの形（再表示はこれを使う）
+    via: {
+      s: [ctx.s.lat, ctx.s.lng],      // 寄った店の座標
+      plusDist: Math.round(plusD),    // 元のルートより増えた距離(m)
+      plusDur:  Math.round(plusT)     // 元のルートより増えた時間(秒)
+    }
+  });
+  saveHist(list.slice(0, HIST_MAX));
+}
 function fmtWhen(t){
   const d = new Date(t);
   const p = n => String(n).padStart(2, '0');
@@ -984,14 +1158,17 @@ function renderHist(){
     return;
   }
   box.innerHTML = list.map((h, i) => {
-    const badge = h.origin === 'center'
-      ? '<span class="badge center">◎ピンから</span>'
-      : '<span class="badge me">現在地から</span>';
+    const badge = h.via
+      ? '<span class="badge via">寄り道</span>'
+      : h.origin === 'center'
+        ? '<span class="badge center">◎ピンから</span>'
+        : '<span class="badge me">現在地から</span>';
     const mode = h.mode === 'car' ? '車' : '徒歩';
+    const plus = h.via ? ' ・ ' + fmtPlusDist(h.via.plusDist) + '/' + fmtPlusDur(h.via.plusDur) : '';
     return '<div class="hist-row">' +
       '<div class="hist-main" onclick="replayHist(' + i + ')">' +
         '<div class="hist-name">' + esc(h.name) + badge + '</div>' +
-        '<div class="hist-sub">' + mode + ' ・ ' + fmtDist(h.dist) + ' ・ ' + fmtDur(h.dur) + ' ・ ' + fmtWhen(h.t) + '</div>' +
+        '<div class="hist-sub">' + mode + ' ・ ' + fmtDist(h.dist) + ' ・ ' + fmtDur(h.dur) + plus + ' ・ ' + fmtWhen(h.t) + '</div>' +
       '</div>' +
       '<button class="hist-del" onclick="delHist(' + i + ')">削除</button>' +
     '</div>';
@@ -1002,9 +1179,21 @@ function replayHist(i){
   const h = loadHist()[i];
   if (!h) return;
   closeSheet();
+  currentDetour = null;
+  dimBase(false);
+  const mode = h.mode === 'car' ? '車' : '徒歩';
+  if (h.via){
+    // 寄り道の履歴：紫の点は寄った店に置く
+    const s = { lat: h.via.s[0], lng: h.via.s[1] };
+    const b = { lat: h.d[0], lng: h.d[1] };
+    drawRoute(h.geo, s, true); // 再表示のときだけルート全体が見えるよう移動
+    currentDest = null;        // 徒歩／車を切り替えても、この履歴は引き直さない
+    setStatus(detourStatusHtml(h.name, mode, h.via.plusDist, h.via.plusDur,
+      h.dist, h.dur, s, b, fmtWhen(h.t)));
+    return;
+  }
   drawRoute(h.geo, { lat: h.d[0], lng: h.d[1] }, true); // 再表示のときだけルート全体が見えるよう移動
   currentDest = { lat: h.d[0], lng: h.d[1], name: h.name };
-  const mode = h.mode === 'car' ? '車' : '徒歩';
   setStatus(routeStatusHtml(
     h.name,
     mode + ' 約 ' + fmtDist(h.dist) + '・約 ' + fmtDur(h.dur) + '（' + fmtWhen(h.t) + 'の履歴）',
@@ -1043,10 +1232,11 @@ function startAb(){
 }
 function abUseMe(){
   if (!me){ showToast('現在地がまだ取れていません。◉ボタンで取得してから試してください'); return; }
-  abSetA({ lat: me.lat, lng: me.lng });
+  abSetA({ lat: me.lat, lng: me.lng }, 'me');
 }
-function abSetA(latlng){
+function abSetA(latlng, kind){
   abA = { lat: latlng.lat, lng: latlng.lng };
+  abAKind = kind || 'point';
   abMarkerA = L.marker([abA.lat, abA.lng], { icon: abIcon('発'), zIndexOffset: 900 }).addTo(map);
   abStep = 2;
   setStatus('<b>ルート沿い検索 ②</b> 次に、<b>到着地を地図でタップ</b>してください。タップすると自動で検索が始まります。' +
@@ -1113,15 +1303,26 @@ async function runAbSearch(){
   abLine = L.geoJSON(route.geometry, { style:{ color:'#2F7DF6', weight:5, opacity:.85 } }).addTo(map);
   map.fitBounds(abLine.getBounds(), FIT_PAD); // 最初の1回だけルート全体が見えるようにする
 
-  const head = '約' + fmtDist(route.distance) + '・' + modeLabel + '約' + fmtDur(route.duration);
-  await searchAlong(route.geometry.coordinates, head);
+  // ルート沿い検索の情報をひとまとめにする（寄り道の比較・スライダーのかけ直しで使う）
+  const ab = {
+    type: 'ab',
+    coords: route.geometry.coordinates,
+    head: '約' + fmtDist(route.distance) + '・' + modeLabel + '約' + fmtDur(route.duration),
+    a: { lat: abA.lat, lng: abA.lng },      // 出発地
+    b: { lat: abB.lat, lng: abB.lng },      // 到着地
+    aKind: abAKind,                         // 出発地の決め方（履歴用）
+    base: { mode: travelMode, dist: route.distance, dur: route.duration } // 元のルート
+  };
+  await searchAlong(ab);
   endAbMode(); // 終わったらモードは自動で終了（線と結果は残る）
 }
 
 // ルート沿いの検索本体。範囲スライダーでのかけ直しでもここが呼ばれる（地図は動かさない）
-async function searchAlong(coords, head){
+// ab は runAbSearch で作った情報（スライダーのときは lastSearch をそのまま渡す）
+async function searchAlong(ab){
   const r = Number($('radius').value); // スライダー値＝ルートからの幅
-  lastSearch = { type: 'ab', coords: coords, head: head };
+  lastSearch = ab;
+  const coords = ab.coords, head = ab.head;
   try{
     let list = [];
     if (YAHOO_CLIENT_ID){
@@ -1174,10 +1375,11 @@ $('radius').addEventListener('input', () => {
   if (!lastSearch || abStep) return; // 検索前・ルート沿いの途中は何もしない
   clearTimeout(sliderTimer);
   sliderTimer = setTimeout(() => {
+    if (!lastSearch) return;
     if (lastSearch.type === 'circle'){
       searchArea(lastSearch.c, lastSearch.label, false);       // 同じ中心・新しい範囲
     }else{
-      searchAlong(lastSearch.coords, lastSearch.head);         // 同じルート・新しい幅
+      searchAlong(lastSearch);                                 // 同じルート・新しい幅
     }
   }, 500);
 });
@@ -1188,7 +1390,7 @@ $('abBtn').addEventListener('click', () => abStep ? cancelAb() : startAb());
 
 // 地図タップ：ルート沿い検索の途中なら、出発地→到着地を置く
 map.on('click', e => {
-  if (abStep === 1){ abSetA(e.latlng); return; }
+  if (abStep === 1){ abSetA(e.latlng, 'point'); return; }
   if (abStep === 2){
     abB = { lat: e.latlng.lat, lng: e.latlng.lng };
     abMarkerB = L.marker([abB.lat, abB.lng], { icon: abIcon('着'), zIndexOffset: 900 }).addTo(map);
@@ -1196,13 +1398,14 @@ map.on('click', e => {
   }
 });
 
-// 徒歩／車の切り替え。ルート表示中なら、その場で引き直す
+// 徒歩／車の切り替え。ルート（または寄り道）を表示中なら、その場で引き直す
 $('modeToggle').querySelectorAll('button').forEach(btn => {
   btn.addEventListener('click', () => {
     $('modeToggle').querySelectorAll('button').forEach(b => b.classList.remove('on'));
     btn.classList.add('on');
     travelMode = btn.dataset.v;
-    if (currentDest) showRouteTo(currentDest, true); // 表示中のルートを新しい手段で引き直す
+    if (currentDetour) showDetour(currentDetour, true);      // 寄り道を新しい手段で比べ直す
+    else if (currentDest) showRouteTo(currentDest, true);    // 表示中のルートを新しい手段で引き直す
   });
 });
 
