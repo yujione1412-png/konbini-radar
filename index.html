@@ -2,7 +2,7 @@
 <!--
 ═══════════════════════════════════════════════════════════════════════════
   コンビニレーダー （konbini-radar）
-  現在バージョン: v1.5.0
+  現在バージョン: v1.6.0
 ═══════════════════════════════════════════════════════════════════════════
 
 ■ このファイルでできること
@@ -16,7 +16,9 @@
     （出発地は「現在地から出発」ワンタップでもOK。画面の案内に従うだけ）
   ・ルート沿いで見つけた店のピンから「寄り道する」を押すと、
     出発地→その店→到着地のルートを表示し、元のルートより何m・何分増えるかが分かる
-  ・見つけたコンビニまでのルート（徒歩／車）をアプリ内に表示する
+  ・右上の🔍で、住所・駅名・施設名を入力して場所を探せる
+    （探す中心にする／ルート沿い検索の出発地・到着地にする、のどちらにも使える）
+  ・見つけたコンビニまでのルート（車／徒歩）をアプリ内に表示する
   ・「Google Mapでルートを開く」でGoogleマップにも切り替えられる（ナビは自動開始しない）
   ・ルートを表示した履歴を端末内（localStorage）に残し、あとから再表示できる
 
@@ -25,6 +27,8 @@
   ・「現在地で探す」= 現在地のまわり ／「十字の位置で探す」= 地図を動かして十字を合わせた場所のまわり
   ・◎ピン: 地図を長押しで置く／動かす。ピンをタップすると「このあたりを探す」「外す」を選べる
   ・ルートの出発地: ◎ピンがあればピンから、なければ現在地から（自動）
+  ・移動手段の初期値は「車」。切り替えると表示中のルート（ルート沿いの青い線も）を引き直す
+  ・探し方を切り替える（現在地で探す／十字の位置で探す／🔍で探す／ルート沿い）と、前のルートは消える
   ・ルート表示や徒歩／車の切り替えでは、地図の位置と拡大率は動かさない（見ている場所を保つ）
   ・寄り道: ルート沿い検索の後、店のピン→「寄り道する」。元のルート（青）は点線になり、
     寄り道ルートは紫で表示。徒歩／車を切り替えると、元のルートも寄り道も引き直して比べ直す
@@ -90,12 +94,26 @@
           ・寄り道ルートも履歴に保存（「寄り道」バッジ・増えた距離と時間つき）
           ・カードの「Gマップ」は 現在地→その店→到着地 のルートで開く（ナビは自動開始しない）
           ・カードの×で寄り道ルートだけを消し、元のルートと検索結果に戻る
+  v1.6.0  場所の入力検索と、ルート表示まわりを改善。
+          ・右上の🔍ボタンで、住所・駅名・施設名を入力して場所を探せるようにした
+            （候補の一覧から選ぶ。ふだんは「その場所のまわりを探す」、
+             ルート沿い検索の①②では「出発地」「到着地」として使える）
+            データ: YOLPの施設検索＋住所検索（同じClient ID）。見つからないときはOSM(Nominatim)
+          ・ルート沿い検索の案内カードに「場所を入力」ボタンを追加
+          ・探し方を切り替えたとき（現在地で探す／十字の位置で探す／入力で探す／
+            ◎ピンのまわりを探す）に、前のルート（ルート沿いの青い線・発着ピン・寄り道）を消すようにした
+          ・ルート沿い検索の後に徒歩／車を切り替えると、青いルートを引き直し、
+            沿線のコンビニも新しいルートで探し直すようにした（地図は動かさない）
+          ・移動手段の初期値を「車」に変更（トグルも 車／徒歩 の順に）
+          ・入力検索の候補は上から出る小さなパネルにまとめ、選ぶと閉じる（地図やルートに重ならない）
 
 ■ 使っている無料サービス（すべてカード登録不要）
   ・Leaflet 1.9.4 …………… 地図の表示（CDN: cdnjs）
   ・OpenStreetMap …………… 地図タイル（帰属表示あり）
   ・YOLP Yahoo!ローカルサーチAPI … コンビニ検索の主データ源（1日5万件まで無料）
   ・Overpass API（OSM） …… Client ID未設定時の予備のコンビニ検索
+  ・YOLP ジオコーダAPI ………… 住所の入力検索（同じClient ID）
+  ・Nominatim（OSM） ………… 入力検索の予備（YOLPで見つからないとき）
   ・OSRM（FOSSGIS公開サーバー） … ルート検索（徒歩／車・経由地つきも可）
   ・Google Maps URLs ……… Googleマップをリンクで開くだけ（キー不要）
 
@@ -187,13 +205,71 @@ button{ font-family:inherit; cursor:pointer; border:none; background:none; }
   font-family:"Zen Maru Gothic","Hiragino Maru Gothic ProN",sans-serif;
   font-size:14.5px; font-weight:700; letter-spacing:.03em;
 }
-#historyBtn{
+/* 右上：🔍（場所の入力検索）と履歴を横に並べる */
+#topRight{
   position:fixed; z-index:20;
   top:calc(10px + env(safe-area-inset-top)); right:12px;
+  display:flex; align-items:center; gap:8px;
+}
+#historyBtn{
   background:var(--card); box-shadow:var(--shadow);
   border-radius:999px; padding:9px 16px;
   font-size:13px; font-weight:700; color:var(--ink);
 }
+#findBtn{
+  width:38px; height:38px; border-radius:50%;
+  background:var(--card); box-shadow:var(--shadow); color:var(--ink);
+  display:flex; align-items:center; justify-content:center;
+}
+#findBtn svg{ width:18px; height:18px; }
+
+/* ---- 場所の入力検索パネル（上から出る・選ぶと閉じる） ---- */
+#findBack{
+  position:fixed; inset:0; background:rgba(20,30,25,.35);
+  z-index:100; opacity:0; pointer-events:none; transition:opacity .2s;
+}
+#findBack.show{ opacity:1; pointer-events:auto; }
+#find{
+  position:fixed; z-index:101; left:10px; right:10px;
+  top:calc(8px + env(safe-area-inset-top));
+  background:#fff; border-radius:var(--radius); box-shadow:var(--shadow);
+  padding:12px; max-height:62vh; display:flex; flex-direction:column;
+  transform:translateY(-130%); transition:transform .22s ease;
+}
+#find.show{ transform:translateY(0); }
+.find-head{ display:flex; align-items:center; gap:8px; margin-bottom:9px; }
+#findTitle{
+  flex:1; font-family:"Zen Maru Gothic",sans-serif; font-size:15px; font-weight:700;
+}
+#findTitle small{ font-family:inherit; font-size:11.5px; font-weight:500; color:#7A877D; margin-left:4px; }
+#findClose{
+  background:#EFEEE6; border-radius:999px; width:30px; height:30px;
+  font-size:14px; color:#5C6B60; flex:none;
+}
+#findForm{ display:flex; gap:8px; }
+#findInput{
+  flex:1; min-width:0; border:1.5px solid #D9D7CC; border-radius:12px;
+  padding:10px 12px; font-size:16px; /* 16px未満だとiPhoneで勝手に拡大されるため */
+  font-family:inherit; color:var(--ink); background:#FAFAF6; outline:none;
+  -webkit-appearance:none; appearance:none;
+}
+#findInput:focus{ border-color:var(--store); background:#fff; }
+#findGo{
+  flex:none; border-radius:12px; padding:0 16px;
+  background:var(--store); color:#fff; font-size:14px; font-weight:700;
+  font-family:"Zen Maru Gothic",sans-serif;
+}
+#findList{ overflow-y:auto; margin-top:6px; }
+.find-row{
+  display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+  padding:10px 4px; border-bottom:1px solid #F0EFE7; color:var(--ink);
+}
+.find-row:last-child{ border-bottom:none; }
+.find-main{ flex:1; min-width:0; }
+.find-name{ font-size:14px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.find-addr{ font-size:11.5px; color:#7A877D; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.find-kind{ flex:none; font-size:10.5px; font-weight:600; border-radius:6px; padding:2px 7px; background:#EFEEE6; color:#5C6B60; }
+.find-msg{ padding:14px 4px 6px; font-size:13px; color:#7A877D; line-height:1.6; }
 
 /* ---- 右下：ルート沿い・現在地ボタン（縦に並ぶ） ---- */
 #meBtn{
@@ -426,7 +502,12 @@ input[type=range]{ flex:1; accent-color:var(--store); height:22px; min-width:0; 
 
 <!-- ═══════ 浮かぶUI ═══════ -->
 <div id="brand"><div class="logo-dot"></div><b>コンビニレーダー</b></div>
-<button id="historyBtn">履歴</button>
+<div id="topRight">
+  <button id="findBtn" title="住所・施設名で探す" aria-label="住所・施設名で探す">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>
+  </button>
+  <button id="historyBtn">履歴</button>
+</div>
 <div id="reticle"></div>
 <button id="abBtn">ルート沿い</button>
 <button id="meBtn" title="現在地へ">◉</button>
@@ -443,13 +524,27 @@ input[type=range]{ flex:1; accent-color:var(--store); height:22px; min-width:0; 
     <input type="range" id="radius" min="200" max="3000" step="100" value="500">
     <span id="radiusVal">500 m</span>
     <div id="modeToggle">
-      <button data-v="foot" class="on">徒歩</button>
-      <button data-v="car">車</button>
+      <button data-v="car" class="on">車</button>
+      <button data-v="foot">徒歩</button>
     </div>
   </div>
 </div>
 
 <div id="toast"></div>
+
+<!-- ═══════ 場所の入力検索パネル ═══════ -->
+<div id="findBack"></div>
+<div id="find">
+  <div class="find-head">
+    <div id="findTitle">場所を探す</div>
+    <button id="findClose">×</button>
+  </div>
+  <form id="findForm" autocomplete="off">
+    <input id="findInput" type="search" enterkeyhint="search" placeholder="住所・駅名・施設名（例: 渋谷駅）">
+    <button id="findGo" type="submit">検索</button>
+  </form>
+  <div id="findList"></div>
+</div>
 
 <!-- ═══════ 履歴シート ═══════ -->
 <div id="sheetBack"></div>
@@ -468,7 +563,7 @@ input[type=range]{ flex:1; accent-color:var(--store); height:22px; min-width:0; 
 /* ════════════════════════════════════════════════════════════
    基本設定
    ════════════════════════════════════════════════════════════ */
-const APP_VERSION = '1.5.0';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
+const APP_VERSION = '1.6.0';  // バージョン（冒頭コメント・履歴シートの表示と合わせる）
 document.getElementById('verLabel').textContent = 'v' + APP_VERSION;
 
 // Yahoo!のClient ID。空文字 '' にすると自動でOSM(Overpass)に切り替わる（動作確認用）
@@ -481,7 +576,7 @@ const TOKYO_STA = [35.681, 139.767];   // 現在地が取れないときの初�
    アプリの状態（いま何が起きているか）
    ════════════════════════════════════════════════════════════ */
 let me = null;            // 現在地 {lat, lng, acc}。取れていなければ null
-let travelMode = 'foot';  // 移動手段: 'foot'=徒歩 / 'car'=車
+let travelMode = 'car';   // 移動手段: 'car'=車（初期値） / 'foot'=徒歩
 let centerPin = null;     // ◎ピン（長押しで置く）。無ければ null
 let currentDest = null;   // いまルートを表示している店 {lat,lng,name}。無ければ null
 let currentDetour = null; // いま表示している寄り道 {s:店, ls:元のルート沿い検索}。無ければ null
@@ -838,6 +933,7 @@ function doSearch(kind){
     c = { lat: me.lat, lng: me.lng }; label = '現在地';
     removePinQuiet(); // 現在地で探すときは◎ピンを外す（出発地も現在地に戻る）
   }
+  clearRouteLayers(); // 探し方を切り替えたので、前のルート（ルート沿い・寄り道・店へのルート）は消す
   searchArea(c, label, true);
 }
 
@@ -1179,8 +1275,7 @@ function replayHist(i){
   const h = loadHist()[i];
   if (!h) return;
   closeSheet();
-  currentDetour = null;
-  dimBase(false);
+  clearRouteLayers(); // 前のルート（ルート沿いの青い線なども）を消してから描く
   const mode = h.mode === 'car' ? '車' : '徒歩';
   if (h.via){
     // 寄り道の履歴：紫の点は寄った店に置く
@@ -1227,6 +1322,7 @@ function startAb(){
   $('abBtn').classList.add('on');
   setStatus('<b>ルート沿い検索 ①</b> 出発地を決めてください。<b>地図をタップ</b>するか、下のボタンをどうぞ。' +
     '<br><button class="act primary" onclick="abUseMe()">現在地から出発</button>' +
+    '<button class="act" onclick="openFind()">場所を入力</button>' +
     '<button class="act" onclick="cancelAb()">中止</button>' +
     '<div class="src">「範囲」スライダーが、ルートからどのくらいの幅まで探すかになります</div>');
 }
@@ -1239,8 +1335,9 @@ function abSetA(latlng, kind){
   abAKind = kind || 'point';
   abMarkerA = L.marker([abA.lat, abA.lng], { icon: abIcon('発'), zIndexOffset: 900 }).addTo(map);
   abStep = 2;
-  setStatus('<b>ルート沿い検索 ②</b> 次に、<b>到着地を地図でタップ</b>してください。タップすると自動で検索が始まります。' +
-    '<br><button class="act" onclick="abRestart()">出発地からやり直す</button>' +
+  setStatus('<b>ルート沿い検索 ②</b> 次に、<b>到着地を地図でタップ</b>するか、場所を入力してください。決まると自動で検索が始まります。' +
+    '<br><button class="act primary" onclick="openFind()">場所を入力</button>' +
+    '<button class="act" onclick="abRestart()">出発地からやり直す</button>' +
     '<button class="act" onclick="cancelAb()">中止</button>');
 }
 function abRestart(){
@@ -1391,23 +1488,183 @@ $('abBtn').addEventListener('click', () => abStep ? cancelAb() : startAb());
 // 地図タップ：ルート沿い検索の途中なら、出発地→到着地を置く
 map.on('click', e => {
   if (abStep === 1){ abSetA(e.latlng, 'point'); return; }
-  if (abStep === 2){
-    abB = { lat: e.latlng.lat, lng: e.latlng.lng };
-    abMarkerB = L.marker([abB.lat, abB.lng], { icon: abIcon('着'), zIndexOffset: 900 }).addTo(map);
-    runAbSearch(); // 到着地を置いたら自動で実行
-  }
+  if (abStep === 2) abSetB(e.latlng);
 });
+// 到着地を置く（地図タップでも、入力検索でも、ここを通る）→ 自動で検索を実行
+function abSetB(latlng){
+  abB = { lat: latlng.lat, lng: latlng.lng };
+  if (abMarkerB) map.removeLayer(abMarkerB);
+  abMarkerB = L.marker([abB.lat, abB.lng], { icon: abIcon('着'), zIndexOffset: 900 }).addTo(map);
+  runAbSearch();
+}
 
 // 徒歩／車の切り替え。ルート（または寄り道）を表示中なら、その場で引き直す
 $('modeToggle').querySelectorAll('button').forEach(btn => {
   btn.addEventListener('click', () => {
     $('modeToggle').querySelectorAll('button').forEach(b => b.classList.remove('on'));
     btn.classList.add('on');
+    if (travelMode === btn.dataset.v) return; // 同じものを押したときは何もしない
     travelMode = btn.dataset.v;
-    if (currentDetour) showDetour(currentDetour, true);      // 寄り道を新しい手段で比べ直す
-    else if (currentDest) showRouteTo(currentDest, true);    // 表示中のルートを新しい手段で引き直す
+    onModeChange();
   });
 });
+
+// 徒歩／車を切り替えたときに、表示中のルートを新しい手段で引き直す
+// （地図の位置・拡大率は動かさない）
+let modeSeq = 0; // 連続で切り替えたとき、古い計算結果で上書きしないための番号
+async function onModeChange(){
+  const seq = ++modeSeq;
+  // ルート沿い検索のルート（青い線）があれば、まずそれを引き直して沿線を探し直す
+  if (!abStep && lastSearch && lastSearch.type === 'ab' && abLine){
+    await refreshAbRoute(lastSearch, seq);
+    if (seq !== modeSeq) return;
+  }
+  if (currentDetour) showDetour(currentDetour, true);      // 寄り道を新しい手段で比べ直す
+  else if (currentDest) showRouteTo(currentDest, true);    // 店へのルートを新しい手段で引き直す
+}
+// ルート沿い検索の青いルートを、いまの移動手段で引き直す → 新しいルートの沿線を探し直す
+async function refreshAbRoute(ls, seq){
+  if (ls.base && ls.base.mode === travelMode) return; // すでにこの手段のルートなら不要
+  const modeLabel = travelMode === 'car' ? '車' : '徒歩';
+  setStatus('ルートを' + modeLabel + 'で引き直しています…');
+  try{
+    const r = await osrmRoute(ls.a, ls.b, travelMode);
+    if (seq !== modeSeq || lastSearch !== ls || !abLine) return; // 途中で別の操作をした
+    ls.base = { mode: travelMode, dist: r.distance, dur: r.duration };
+    ls.coords = r.geometry.coordinates;
+    ls.head = '約' + fmtDist(r.distance) + '・' + modeLabel + '約' + fmtDur(r.duration);
+    abLine.clearLayers(); abLine.addData(r.geometry); // 青い線を描き直す（地図は動かさない）
+    await searchAlong(ls);                            // 新しいルートの沿線を探し直す
+  }catch(e){
+    setStatus('ルートの引き直しに失敗しました。無料サーバーが混みあっている可能性があります。' +
+      '少し待ってから、もう一度 徒歩／車 を押すか「ルート沿い」からやり直してください。');
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   場所の入力検索（住所・駅名・施設名 → 候補を選ぶ）
+   使いみち（findPurpose）:
+     'center' … その場所に◎ピンを立てて、まわりのコンビニを探す（ふだん）
+     'abA'    … ルート沿い検索①の出発地にする
+     'abB'    … ルート沿い検索②の到着地にする
+   ════════════════════════════════════════════════════════════ */
+let findPurpose = 'center';
+let findHits = []; // いま一覧に出している候補 [{name, addr, kind, lat, lng}]
+
+function openFind(){
+  if (abStep === 3){ showToast('ルート沿いを検索中です。終わるまでお待ちください'); return; }
+  findPurpose = abStep === 1 ? 'abA' : abStep === 2 ? 'abB' : 'center';
+  const title = { center:'場所を探す', abA:'出発地を入力', abB:'到着地を入力' }[findPurpose];
+  const note  = { center:'まわりのコンビニを探します', abA:'ルート沿い検索 ①', abB:'ルート沿い検索 ②' }[findPurpose];
+  $('findTitle').innerHTML = title + '<small>' + note + '</small>';
+  $('findList').innerHTML = findHits.length ? $('findList').innerHTML : '';
+  $('findBack').classList.add('show');
+  $('find').classList.add('show');
+  setTimeout(() => { $('findInput').focus(); $('findInput').select(); }, 250);
+}
+function closeFind(){
+  $('findInput').blur();
+  $('findBack').classList.remove('show');
+  $('find').classList.remove('show');
+}
+
+// YOLPの施設検索（キーワード）。地図の中心に近いものほど上に出す
+async function yolpPlaceSearch(q){
+  const c = map.getCenter();
+  const url = 'https://map.yahooapis.jp/search/local/V1/localSearch'
+    + '?appid=' + encodeURIComponent(YAHOO_CLIENT_ID)
+    + '&query=' + encodeURIComponent(q)
+    + '&lat=' + c.lat + '&lon=' + c.lng
+    + '&sort=hybrid&results=8&output=json';
+  const data = await jsonp(url);
+  return (data.Feature || []).map(f => {
+    const [lng, lat] = f.Geometry.Coordinates.split(',').map(Number);
+    return { name: f.Name, addr: (f.Property && f.Property.Address) || '', kind: '施設', lat, lng };
+  });
+}
+// YOLPの住所検索（ジオコーダ）
+async function yolpAddressSearch(q){
+  const url = 'https://map.yahooapis.jp/geocode/V1/geoCoder'
+    + '?appid=' + encodeURIComponent(YAHOO_CLIENT_ID)
+    + '&query=' + encodeURIComponent(q)
+    + '&results=5&output=json';
+  const data = await jsonp(url);
+  return (data.Feature || []).map(f => {
+    const [lng, lat] = f.Geometry.Coordinates.split(',').map(Number);
+    return { name: f.Name, addr: '', kind: '住所', lat, lng };
+  });
+}
+// 予備：OpenStreetMapの住所・施設検索（Nominatim）。検索ボタンを押したときだけ呼ぶ
+async function nominatimSearch(q){
+  const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=6'
+    + '&countrycodes=jp&accept-language=ja&q=' + encodeURIComponent(q);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  return data.map(d => {
+    const parts = String(d.display_name).split(',').map(x => x.trim());
+    return { name: parts[0], addr: parts.slice(1, 4).reverse().join(' '), kind: '場所',
+             lat: Number(d.lat), lng: Number(d.lon) };
+  });
+}
+
+// 入力された言葉で候補を探して一覧に出す
+async function runFind(){
+  const q = $('findInput').value.trim();
+  if (!q){ $('findInput').focus(); return; }
+  $('findList').innerHTML = '<div class="find-msg">「' + esc(q) + '」を探しています…</div>';
+  let hits = [];
+  if (YAHOO_CLIENT_ID){
+    // 住所と施設を同時に探す（片方が失敗しても、もう片方の結果は使う）
+    const [addr, place] = await Promise.allSettled([yolpAddressSearch(q), yolpPlaceSearch(q)]);
+    // 番地や「丁目」を含むなど住所っぽい入力なら住所を先に、それ以外は施設を先に並べる
+    const looksAddr = /[0-9０-９]|丁目|番地|都|道|府|県|市|区|町|村/.test(q);
+    const A = addr.status === 'fulfilled' ? addr.value : [];
+    const P = place.status === 'fulfilled' ? place.value : [];
+    hits = looksAddr ? A.concat(P) : P.concat(A);
+  }
+  if (!hits.length){
+    try{ hits = await nominatimSearch(q); }catch(e){ /* 予備も失敗したら0件扱い */ }
+  }
+  hits = dedup(hits).slice(0, 8); // 同じ名前で30m以内の重複は1件に
+  findHits = hits;
+  if (!hits.length){
+    $('findList').innerHTML = '<div class="find-msg">「' + esc(q) + '」は見つかりませんでした。<br>' +
+      '言葉を短くするか、「〇〇駅」「〇〇市〇〇町」のように入れ直してみてください。</div>';
+    return;
+  }
+  $('findList').innerHTML = hits.map((h, i) =>
+    '<button class="find-row" onclick="pickFind(' + i + ')">' +
+      '<div class="find-main"><div class="find-name">' + esc(h.name) + '</div>' +
+      (h.addr ? '<div class="find-addr">' + esc(h.addr) + '</div>' : '') + '</div>' +
+      '<span class="find-kind">' + h.kind + '</span>' +
+    '</button>').join('');
+}
+
+// 候補を選んだとき：使いみちに合わせて、探す中心・出発地・到着地にする
+function pickFind(i){
+  const h = findHits[i];
+  if (!h) return;
+  closeFind();
+  const c = { lat: h.lat, lng: h.lng };
+  if (findPurpose === 'abA' && abStep === 1){
+    map.panTo([c.lat, c.lng]);   // 出発地が見えるように移動
+    abSetA(c, 'point');
+  }else if (findPurpose === 'abB' && abStep === 2){
+    abSetB(c);                   // 到着地を置くと自動で検索（ルート全体が見えるよう移動する）
+  }else{
+    // その場所に◎ピンを立てて、まわりを探す（名前が長いときは短くして表示）
+    const label = h.name.length > 12 ? h.name.slice(0, 12) + '…' : h.name;
+    placePin(c, true);
+    clearRouteLayers();          // 探し方を切り替えたので前のルートは消す
+    searchArea(c, label, true);
+  }
+}
+
+$('findBtn').addEventListener('click', openFind);
+$('findClose').addEventListener('click', closeFind);
+$('findBack').addEventListener('click', closeFind);
+$('findForm').addEventListener('submit', e => { e.preventDefault(); runFind(); });
 
 // 履歴シート
 $('historyBtn').addEventListener('click', openSheet);
